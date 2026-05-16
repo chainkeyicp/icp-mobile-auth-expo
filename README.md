@@ -340,6 +340,11 @@ ryjl3-tyaaa-aaaaa-aaaba-cai
 
 The receive field is the default ICRC-1 account owner principal for the logged-in identity. The app queries `icrc1_balance_of` and `icrc1_fee`, then sends with `icrc1_transfer` only after a native confirmation dialog. These are real mainnet ICP transfers; verify the recipient principal carefully before confirming.
 
+The app requests a 30-day Internet Identity delegation. While that delegation is
+valid, the stored session key and delegation chain can sign Ledger calls without
+opening `id.ai` again. After it expires, the user must refresh the Internet
+Identity delegation before sending ICP.
+
 The Cloudflare URL used during local testing is only a temporary HTTPS tunnel to the local `/mobile-auth` server. Use a stable production domain or frontend canister origin before relying on balances or receive principals long term, because Internet Identity principals are origin scoped.
 
 ## Device Login

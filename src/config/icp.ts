@@ -21,7 +21,13 @@ export const ICP_LEDGER_CANISTER_ID =
 export const MOBILE_AUTH_RETURN_MODE =
   process.env.EXPO_PUBLIC_MOBILE_AUTH_RETURN_MODE === 'direct' ? 'direct' : 'code';
 
-export const DEFAULT_DELEGATION_TTL_NS = BigInt(30 * 60) * BigInt(1_000_000_000);
+const DELEGATION_TTL_DAYS = 30;
+
+// Internet Identity supports client delegations up to 30 days. The app stores
+// the session key locally, so this enables Ledger signing until the delegation
+// expires without reopening id.ai.
+export const DEFAULT_DELEGATION_TTL_NS =
+  BigInt(DELEGATION_TTL_DAYS * 24 * 60 * 60) * BigInt(1_000_000_000);
 
 function inferCanisterIdFromAuthUrl(authUrl: string): string {
   try {
