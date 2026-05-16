@@ -9,6 +9,7 @@ This project implements a React Native Expo login flow for Internet Computer aut
 - Ed25519 session identity generation in React Native
 - Secure session persistence with `expo-secure-store`
 - Delegation restore and expiration checks
+- Optional local device login after the first Internet Identity onboarding
 - Sample authenticated actor call
 - Real ICP Ledger ICRC-1 balance, receive principal, fee, and transfer UI
 - `/mobile-auth` web page that speaks the Internet Identity Client Authentication Protocol
@@ -68,6 +69,7 @@ For a production Android App Link callback without a custom domain, deploy the `
 EXPO_PUBLIC_AUTH_FRONTEND_URL=https://<AUTH_CANISTER_ID>.raw.icp0.io
 EXPO_PUBLIC_AUTH_APP_LINK_HOST=<AUTH_CANISTER_ID>.raw.icp0.io
 EXPO_PUBLIC_AUTH_CALLBACK_URL=https://<AUTH_CANISTER_ID>.raw.icp0.io/auth-callback
+EXPO_PUBLIC_MOBILE_AUTH_CANISTER_ID=<AUTH_CANISTER_ID>
 ```
 
 The app still keeps the custom `icpmobileauth://auth-callback` scheme for development fallback, but the production callback should use the verified HTTPS app link.
@@ -98,6 +100,7 @@ Create `.env` from `.env.mainnet.example` and use the current hosted auth canist
 EXPO_PUBLIC_AUTH_FRONTEND_URL=https://uu46p-iaaaa-aaaak-qy3lq-cai.raw.icp0.io
 EXPO_PUBLIC_AUTH_APP_LINK_HOST=uu46p-iaaaa-aaaak-qy3lq-cai.raw.icp0.io
 EXPO_PUBLIC_AUTH_CALLBACK_URL=https://uu46p-iaaaa-aaaak-qy3lq-cai.raw.icp0.io/auth-callback
+EXPO_PUBLIC_MOBILE_AUTH_CANISTER_ID=uu46p-iaaaa-aaaak-qy3lq-cai
 EXPO_PUBLIC_IC_HOST=https://icp-api.io
 EXPO_PUBLIC_SAMPLE_CANISTER_ID=
 EXPO_PUBLIC_ICP_LEDGER_CANISTER_ID=ryjl3-tyaaa-aaaaa-aaaba-cai
@@ -116,6 +119,7 @@ Build and install the Android APK from PowerShell:
 $env:EXPO_PUBLIC_AUTH_FRONTEND_URL='https://uu46p-iaaaa-aaaak-qy3lq-cai.raw.icp0.io'
 $env:EXPO_PUBLIC_AUTH_APP_LINK_HOST='uu46p-iaaaa-aaaak-qy3lq-cai.raw.icp0.io'
 $env:EXPO_PUBLIC_AUTH_CALLBACK_URL='https://uu46p-iaaaa-aaaak-qy3lq-cai.raw.icp0.io/auth-callback'
+$env:EXPO_PUBLIC_MOBILE_AUTH_CANISTER_ID='uu46p-iaaaa-aaaak-qy3lq-cai'
 $env:EXPO_PUBLIC_IC_HOST='https://icp-api.io'
 $env:EXPO_PUBLIC_SAMPLE_CANISTER_ID=''
 $env:EXPO_PUBLIC_ICP_LEDGER_CANISTER_ID='ryjl3-tyaaa-aaaaa-aaaba-cai'
@@ -229,7 +233,34 @@ This repo includes a Motoko HTTP canister named `mobile_auth`. It serves:
 /auth-callback
 POST /mobile-auth/store/<state>
 POST /mobile-auth/exchange/<state>/<code>
+register_device(device, label)
+device_login()
+my_devices()
+revoke_device(device)
 ```
+
+## Device Login After First Internet Identity
+
+The app can avoid opening `id.ai` after the first onboarding for calls to your own `mobile_auth` canister.
+
+The flow is:
+
+1. The user logs in once with Internet Identity.
+2. The app creates a separate Ed25519 device identity on the phone.
+3. The app registers that device principal with `mobile_auth` while the caller is still the Internet Identity delegation principal.
+4. The device private key is stored in `expo-secure-store` with local device authentication.
+5. On the next app launch, if the Internet Identity delegation has expired, the app unlocks the device key locally and calls `device_login()` directly.
+
+This does not extend or replace the Internet Identity delegation for arbitrary canisters. The device principal is a separate caller that your canister maps back to the original Internet Identity owner principal. It is good for app sessions, profiles, settings, and smart-wallet policy calls controlled by your own canister.
+
+For the real ICP Ledger, the owner of funds is still the caller principal. A device-login session cannot spend ICP from the Internet Identity principal. Use Internet Identity again for Ledger transfers, or move funds into a purpose-built smart-wallet canister that explicitly supports device authorization or threshold signing.
+
+Security notes:
+
+- Deleting the app or clearing app data removes the local device key.
+- `Forget this device` removes the local device key and, when currently authenticated with Internet Identity, asks the canister to revoke that device.
+- A new phone still needs Internet Identity once to register its own device key.
+- This is not the same as the experimental canister-user threshold signing discussed on the forum; it is a simpler device registry pattern that can be built today.
 
 Build the canister assets before deploying:
 

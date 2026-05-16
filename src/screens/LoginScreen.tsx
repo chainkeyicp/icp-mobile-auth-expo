@@ -11,8 +11,19 @@ import {
 } from 'react-native';
 
 import { AUTH_FRONTEND_URL, SAMPLE_CANISTER_ID } from '../config/icp';
-import { createAuthenticatedAgent, loginWithIcp, logout, restoreSession, type AuthSession } from '../auth/icpAuthService';
+import {
+  createAuthenticatedAgent,
+  enableDeviceLogin,
+  forgetDeviceLogin,
+  hasStoredDeviceLogin,
+  loginWithIcp,
+  logout,
+  restoreDeviceSession,
+  restoreSession,
+  type AuthSession
+} from '../auth/icpAuthService';
 import { callSampleCanister } from '../icp/sampleActor';
+import { whoamiOnAuthCanister, type DeviceLoginInfo } from '../icp/mobileAuthCanister';
 import {
   formatIcp,
   getIcpLedgerSnapshot,
@@ -34,9 +45,12 @@ export function LoginScreen() {
   const [recipientPrincipal, setRecipientPrincipal] = useState('');
   const [amountIcp, setAmountIcp] = useState('');
   const [transferReceipt, setTransferReceipt] = useState<IcpTransferReceipt | null>(null);
+  const [deviceLogin, setDeviceLogin] = useState<DeviceLoginInfo | null>(null);
+  const [deviceLoginAvailable, setDeviceLoginAvailable] = useState(false);
+  const [deviceStatus, setDeviceStatus] = useState<string | null>(null);
 
   const expirationLabel = useMemo(() => {
-    if (!session) {
+    if (!session?.expirationMs) {
       return null;
     }
 
@@ -46,16 +60,67 @@ export function LoginScreen() {
   useEffect(() => {
     let mounted = true;
 
-    restoreSession()
-      .then(restored => {
+    async function bootstrap() {
+      try {
+        const restored = await restoreSession();
         if (!mounted) {
           return;
         }
+
         setSession(restored);
         if (restored) {
+          const deviceMeta = await hasStoredDeviceLogin();
+          if (!mounted) {
+            return;
+          }
+          setDeviceLoginAvailable(Boolean(deviceMeta));
           setStatus('Authenticated');
           setCheckingSession(false);
+          if (deviceMeta) {
+            setDeviceStatus('Device login is available on this phone.');
+          } else {
+            void handleEnableDeviceLogin(restored);
+          }
           void refreshLedger(restored);
+          return;
+        }
+
+        const deviceMeta = await hasStoredDeviceLogin();
+        if (!mounted) {
+          return;
+        }
+
+        setDeviceLoginAvailable(Boolean(deviceMeta));
+        if (deviceMeta) {
+          setStatus('Unlocking device login...');
+          let restoredDevice: AuthSession | null = null;
+          try {
+            restoredDevice = await restoreDeviceSession();
+          } catch (reason) {
+            if (!mounted) {
+              return;
+            }
+            setError(reason instanceof Error ? reason.message : String(reason));
+            setStatus('Device unlock cancelled');
+            setCheckingSession(false);
+            return;
+          }
+
+          if (!mounted) {
+            return;
+          }
+
+          if (restoredDevice) {
+            setSession(restoredDevice);
+            setDeviceLogin(restoredDevice.device ?? null);
+            setDeviceStatus('Unlocked with this phone. Internet Identity was not opened.');
+            setStatus('Device authenticated');
+            setCheckingSession(false);
+            return;
+          }
+
+          setStatus('Device login unavailable');
+          setCheckingSession(false);
           return;
         }
 
@@ -69,15 +134,17 @@ export function LoginScreen() {
 
         setStatus('Not authenticated');
         setCheckingSession(false);
-      })
-      .catch(reason => {
+      } catch (reason) {
         if (!mounted) {
           return;
         }
         setError(reason instanceof Error ? reason.message : String(reason));
         setStatus('Not authenticated');
         setCheckingSession(false);
-      });
+      }
+    }
+
+    void bootstrap();
 
     return () => {
       mounted = false;
@@ -85,7 +152,7 @@ export function LoginScreen() {
   }, []);
 
   async function refreshLedger(nextSession = session) {
-    if (!nextSession) {
+    if (!nextSession || nextSession.kind !== 'delegation') {
       return;
     }
 
@@ -115,6 +182,7 @@ export function LoginScreen() {
       setSession(nextSession);
       setStatus('Authenticated');
       await refreshLedger(nextSession);
+      await handleEnableDeviceLogin(nextSession);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
       setStatus('Not authenticated');
@@ -143,6 +211,87 @@ export function LoginScreen() {
     }
   }
 
+  async function handleCallAuthCanister() {
+    if (!session) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setCanisterResult(null);
+
+    try {
+      const agent = await createAuthenticatedAgent(session.identity);
+      const principal = await whoamiOnAuthCanister(agent);
+      setCanisterResult(`mobile_auth whoami: ${principal}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUnlockDeviceLogin() {
+    setBusy(true);
+    setError(null);
+    setStatus('Unlocking device login...');
+
+    try {
+      const restoredDevice = await restoreDeviceSession();
+      if (!restoredDevice) {
+        throw new Error('This phone is not registered or the device login was revoked.');
+      }
+
+      setSession(restoredDevice);
+      setDeviceLogin(restoredDevice.device ?? null);
+      setDeviceLoginAvailable(true);
+      setDeviceStatus('Unlocked with this phone. Internet Identity was not opened.');
+      setStatus('Device authenticated');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      setStatus('Device unlock failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleEnableDeviceLogin(nextSession = session) {
+    if (!nextSession || nextSession.kind !== 'delegation') {
+      return;
+    }
+
+    try {
+      const device = await enableDeviceLogin(nextSession, 'This phone');
+      setDeviceLogin(device);
+      setDeviceLoginAvailable(true);
+      setDeviceStatus('Device login enabled for this phone.');
+    } catch (reason) {
+      setDeviceStatus(
+        `Device login setup failed: ${reason instanceof Error ? reason.message : String(reason)}`
+      );
+    }
+  }
+
+  async function handleForgetDeviceLogin() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      await forgetDeviceLogin(session);
+      setDeviceLogin(null);
+      setDeviceLoginAvailable(false);
+      setDeviceStatus('Device login removed from this phone.');
+      if (session?.kind === 'device') {
+        setSession(null);
+        setStatus('Not authenticated');
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleLogout() {
     setBusy(true);
     setError(null);
@@ -152,6 +301,7 @@ export function LoginScreen() {
       await logout();
       setSession(null);
       setLedgerSnapshot(null);
+      setCanisterResult(null);
       setStatus('Not authenticated');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -161,7 +311,7 @@ export function LoginScreen() {
   }
 
   function confirmSendIcp() {
-    if (!session) {
+    if (!session || session.kind !== 'delegation') {
       return;
     }
 
@@ -192,7 +342,7 @@ export function LoginScreen() {
   }
 
   async function handleSendIcp(trimmedRecipient: string, trimmedAmount: string) {
-    if (!session) {
+    if (!session || session.kind !== 'delegation') {
       return;
     }
 
@@ -240,20 +390,59 @@ export function LoginScreen() {
         {session ? (
           <>
             <View style={styles.panel}>
+              <Text style={styles.label}>Session type</Text>
+              <Text style={styles.value}>
+                {session.kind === 'delegation' ? 'Internet Identity delegation' : 'Device login'}
+              </Text>
+
               <Text style={styles.label}>Principal</Text>
               <Text selectable style={styles.value}>
                 {session.principal}
               </Text>
 
-              <Text style={styles.label}>Delegation expiration</Text>
-              <Text style={styles.value}>{expirationLabel}</Text>
+              <Text style={styles.label}>Current caller</Text>
+              <Text selectable style={styles.value}>
+                {session.callerPrincipal}
+              </Text>
+
+              {session.kind === 'delegation' ? (
+                <>
+                  <Text style={styles.label}>Delegation expiration</Text>
+                  <Text style={styles.value}>{expirationLabel}</Text>
+                </>
+              ) : (
+                <Text style={styles.helpText}>
+                  This phone is recognized by the auth canister. Internet Identity was not opened for this session.
+                </Text>
+              )}
+
+              {deviceLogin || session.device ? (
+                <>
+                  <Text style={styles.label}>Registered device</Text>
+                  <Text selectable style={styles.value}>
+                    {(deviceLogin ?? session.device)?.devicePrincipal}
+                  </Text>
+                </>
+              ) : null}
+
+              {deviceStatus ? <Text style={styles.helpText}>{deviceStatus}</Text> : null}
 
               <View style={styles.buttonGroup}>
-                <Button title="Call canister" onPress={handleCallCanister} disabled={busy || !SAMPLE_CANISTER_ID} />
+                <Button title="Call auth canister" onPress={handleCallAuthCanister} disabled={busy} />
+                <Button title="Call sample canister" onPress={handleCallCanister} disabled={busy || !SAMPLE_CANISTER_ID} />
+                {session.kind === 'delegation' ? (
+                  <Button title="Enable device login" onPress={() => handleEnableDeviceLogin()} disabled={busy} />
+                ) : (
+                  <Button title="Login with Internet Identity" onPress={handleLogin} disabled={busy || !AUTH_FRONTEND_URL} />
+                )}
+                {deviceLoginAvailable || session.device ? (
+                  <Button title="Forget this device" onPress={handleForgetDeviceLogin} disabled={busy} />
+                ) : null}
                 <Button title="Logout" onPress={handleLogout} disabled={busy} />
               </View>
             </View>
 
+            {session.kind === 'delegation' ? (
             <View style={styles.panel}>
               <Text style={styles.sectionTitle}>ICP Ledger</Text>
               <Text style={styles.label}>Receive ICP</Text>
@@ -311,9 +500,22 @@ export function LoginScreen() {
                 disabled={ledgerBusy || !recipientPrincipal.trim() || !amountIcp.trim()}
               />
             </View>
+            ) : (
+              <View style={styles.panel}>
+                <Text style={styles.sectionTitle}>ICP Ledger</Text>
+                <Text style={styles.helpText}>
+                  Device login can identify this phone to your own canister, but it cannot spend ICP from the Internet
+                  Identity principal. Use Internet Identity when you want real Ledger transfers.
+                </Text>
+                <Button title="Login with Internet Identity" onPress={handleLogin} disabled={busy || !AUTH_FRONTEND_URL} />
+              </View>
+            )}
           </>
         ) : (
           <View style={styles.buttonGroup}>
+            {deviceLoginAvailable ? (
+              <Button title="Unlock device login" onPress={handleUnlockDeviceLogin} disabled={busy} />
+            ) : null}
             <Button title="Login with Internet Identity" onPress={handleLogin} disabled={busy || !AUTH_FRONTEND_URL} />
             {/* TODO: Add NFID once its mobile delegation protocol is implemented for the hosted auth page. */}
           </View>

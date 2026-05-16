@@ -29,7 +29,20 @@ type HttpResponse = record {
   streaming_strategy : opt StreamingStrategy;
   upgrade : opt bool;
 };
+type DeviceRecord = record {
+  owner : principal;
+  device : principal;
+  device_name : text;
+  created_at : int;
+  last_seen_at : opt int;
+  revoked : bool;
+};
 service : {
+  device_login : () -> (opt DeviceRecord);
   http_request : (HttpRequest) -> (HttpResponse) query;
   http_request_update : (HttpRequest) -> (HttpResponse);
+  my_devices : () -> (vec DeviceRecord) query;
+  register_device : (principal, text) -> (opt DeviceRecord);
+  revoke_device : (principal) -> (bool);
+  whoami : () -> (principal) query;
 };

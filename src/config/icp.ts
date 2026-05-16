@@ -10,6 +10,9 @@ export const AUTH_CALLBACK_URL =
 export const AUTH_FRONTEND_URL =
   process.env.EXPO_PUBLIC_AUTH_FRONTEND_URL?.replace(/\/$/, '') ?? '';
 
+export const MOBILE_AUTH_CANISTER_ID =
+  process.env.EXPO_PUBLIC_MOBILE_AUTH_CANISTER_ID ?? inferCanisterIdFromAuthUrl(AUTH_FRONTEND_URL);
+
 export const IC_HOST = process.env.EXPO_PUBLIC_IC_HOST ?? 'https://icp-api.io';
 export const SAMPLE_CANISTER_ID = process.env.EXPO_PUBLIC_SAMPLE_CANISTER_ID ?? '';
 export const ICP_LEDGER_CANISTER_ID =
@@ -19,3 +22,13 @@ export const MOBILE_AUTH_RETURN_MODE =
   process.env.EXPO_PUBLIC_MOBILE_AUTH_RETURN_MODE === 'direct' ? 'direct' : 'code';
 
 export const DEFAULT_DELEGATION_TTL_NS = BigInt(30 * 60) * BigInt(1_000_000_000);
+
+function inferCanisterIdFromAuthUrl(authUrl: string): string {
+  try {
+    const hostname = new URL(authUrl).hostname;
+    const canisterId = hostname.split('.')[0] ?? '';
+    return canisterId.includes('-') ? canisterId : '';
+  } catch {
+    return '';
+  }
+}

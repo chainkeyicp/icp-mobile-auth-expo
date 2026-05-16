@@ -5,6 +5,7 @@ import HashMap "mo:base/HashMap";
 import Iter "mo:base/Iter";
 import Nat "mo:base/Nat";
 import Nat8 "mo:base/Nat8";
+import Principal "mo:base/Principal";
 import Random "mo:base/Random";
 import Text "mo:base/Text";
 import Time "mo:base/Time";
@@ -55,9 +56,129 @@ actor {
     expiresAt : Int;
   };
 
+  public type DeviceRecord = {
+    owner : Principal;
+    device : Principal;
+    device_name : Text;
+    created_at : Int;
+    last_seen_at : ?Int;
+    revoked : Bool;
+  };
+
   let codeTtlNs : Int = 60_000_000_000;
   let codes = HashMap.HashMap<Text, StoredCode>(16, Text.equal, Text.hash);
+  stable var stableDevices : [(Principal, DeviceRecord)] = [];
+  let devices = HashMap.HashMap<Principal, DeviceRecord>(16, Principal.equal, Principal.hash);
   let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
+
+  system func preupgrade() {
+    stableDevices := Iter.toArray(devices.entries());
+  };
+
+  system func postupgrade() {
+    for ((device, record) in stableDevices.vals()) {
+      devices.put(device, record);
+    };
+    stableDevices := [];
+  };
+
+  public shared({ caller }) func register_device(device : Principal, device_name : Text) : async ?DeviceRecord {
+    if (Principal.isAnonymous(caller) or Principal.isAnonymous(device)) {
+      return null;
+    };
+
+    let now = Time.now();
+
+    switch (devices.get(device)) {
+      case (?existing) {
+        if (existing.owner != caller) {
+          return null;
+        };
+
+        let updated : DeviceRecord = {
+          owner = caller;
+          device = device;
+          device_name = normalizeDeviceLabel(device_name);
+          created_at = existing.created_at;
+          last_seen_at = existing.last_seen_at;
+          revoked = false;
+        };
+        devices.put(device, updated);
+        ?updated;
+      };
+      case null {
+        let record : DeviceRecord = {
+          owner = caller;
+          device = device;
+          device_name = normalizeDeviceLabel(device_name);
+          created_at = now;
+          last_seen_at = null;
+          revoked = false;
+        };
+        devices.put(device, record);
+        ?record;
+      };
+    };
+  };
+
+  public shared({ caller }) func device_login() : async ?DeviceRecord {
+    switch (devices.get(caller)) {
+      case null null;
+      case (?record) {
+        if (record.revoked) {
+          return null;
+        };
+
+        let updated : DeviceRecord = {
+          owner = record.owner;
+          device = record.device;
+          device_name = record.device_name;
+          created_at = record.created_at;
+          last_seen_at = ?Time.now();
+          revoked = false;
+        };
+        devices.put(caller, updated);
+        ?updated;
+      };
+    };
+  };
+
+  public shared query({ caller }) func my_devices() : async [DeviceRecord] {
+    let mine = Buffer.Buffer<DeviceRecord>(0);
+
+    for ((_, record) in devices.entries()) {
+      if (record.owner == caller) {
+        mine.add(record);
+      };
+    };
+
+    Buffer.toArray(mine);
+  };
+
+  public shared({ caller }) func revoke_device(device : Principal) : async Bool {
+    switch (devices.get(device)) {
+      case null false;
+      case (?record) {
+        if (record.owner != caller) {
+          return false;
+        };
+
+        devices.put(device, {
+          owner = record.owner;
+          device = record.device;
+          device_name = record.device_name;
+          created_at = record.created_at;
+          last_seen_at = record.last_seen_at;
+          revoked = true;
+        });
+        true;
+      };
+    };
+  };
+
+  public shared query({ caller }) func whoami() : async Principal {
+    caller;
+  };
 
   public query func http_request(request : HttpRequest) : async HttpResponse {
     if (request.method == "OPTIONS") {
@@ -162,6 +283,15 @@ actor {
 
     for (code in expired.vals()) {
       codes.delete(code);
+    };
+  };
+
+  func normalizeDeviceLabel(name : Text) : Text {
+    let trimmed = Text.trim(name, #char ' ');
+    if (Text.size(trimmed) == 0) {
+      "Mobile device";
+    } else {
+      trimmed;
     };
   };
 
