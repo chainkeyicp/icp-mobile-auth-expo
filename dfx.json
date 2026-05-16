@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "canisters": {
+    "mobile_auth": {
+      "type": "motoko",
+      "main": "src/mobile_auth_canister/main.mo",
+      "candid": "src/mobile_auth_canister/mobile_auth.did"
+    }
+  },
+  "networks": {
+    "ic": {
+      "providers": ["https://icp-api.io"],
+      "type": "persistent"
+    }
+  }
+}

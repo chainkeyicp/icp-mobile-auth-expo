@@ -1,0 +1,27 @@
+node_modules/
+.npm-cache/
+.expo/
+.dfx/
+dist/
+web-build/
+mobile-auth/dist/
+.env
+.env.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.codex-*.log
+
+# Native build outputs
+android/.gradle/
+android/.kotlin/
+android/.cxx/
+android/build/
+android/app/build/
+*.apk
+*.aab
+
+# Local device screenshots and scratch captures
+*.png
+*.jpg
+*.jpeg

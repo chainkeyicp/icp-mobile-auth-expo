@@ -1,0 +1,45 @@
+{
+  "name": "icp-mobile-auth-expo",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "dev:mobile-auth": "vite --config mobile-auth/vite.config.mjs --host 0.0.0.0",
+    "build:mobile-auth": "vite build --config mobile-auth/vite.config.mjs",
+    "build:auth-canister": "npm run build:mobile-auth && node scripts/generate-auth-canister-assets.mjs",
+    "deploy:auth-canister:ic": "npm run build:auth-canister && dfx deploy mobile_auth --network ic --with-cycles 1000000000000",
+    "auth:server": "node mobile-auth/server.mjs"
+  },
+  "dependencies": {
+    "@craftzdog/react-native-buffer": "^6.0.5",
+    "@dfinity/agent": "^3.2.4",
+    "@dfinity/candid": "^3.2.4",
+    "@dfinity/identity": "^3.2.4",
+    "@dfinity/principal": "^3.2.4",
+    "expo": "^54.0.0",
+    "expo-crypto": "~15.0.0",
+    "expo-linking": "~8.0.0",
+    "expo-secure-store": "~15.0.0",
+    "expo-status-bar": "~3.0.8",
+    "expo-web-browser": "~15.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.4",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-url-polyfill": "^2.0.0",
+    "text-encoding": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "babel-preset-expo": "^55.0.21",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.0"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "ICP Mobile Auth",
+    "slug": "icp-mobile-auth",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "icpmobileauth",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.icpmobileauth"
+    },
+    "android": {
+      "package": "com.example.icpmobileauth",
+      "usesCleartextTraffic": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": false,
+          "data": [
+            {
+              "scheme": "icpmobileauth"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": ["expo-secure-store"]
+  }
+}

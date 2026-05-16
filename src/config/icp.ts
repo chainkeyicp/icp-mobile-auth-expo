@@ -1,0 +1,21 @@
+export const APP_SCHEME = 'icpmobileauth';
+export const AUTH_CALLBACK_HOST = 'auth-callback';
+export const AUTH_APP_LINK_HOST = process.env.EXPO_PUBLIC_AUTH_APP_LINK_HOST ?? '';
+export const AUTH_CALLBACK_URL =
+  process.env.EXPO_PUBLIC_AUTH_CALLBACK_URL?.replace(/\/$/, '') ??
+  (AUTH_APP_LINK_HOST
+    ? `https://${AUTH_APP_LINK_HOST}/${AUTH_CALLBACK_HOST}`
+    : `${APP_SCHEME}://${AUTH_CALLBACK_HOST}`);
+
+export const AUTH_FRONTEND_URL =
+  process.env.EXPO_PUBLIC_AUTH_FRONTEND_URL?.replace(/\/$/, '') ?? '';
+
+export const IC_HOST = process.env.EXPO_PUBLIC_IC_HOST ?? 'https://icp-api.io';
+export const SAMPLE_CANISTER_ID = process.env.EXPO_PUBLIC_SAMPLE_CANISTER_ID ?? '';
+export const ICP_LEDGER_CANISTER_ID =
+  process.env.EXPO_PUBLIC_ICP_LEDGER_CANISTER_ID ?? 'ryjl3-tyaaa-aaaaa-aaaba-cai';
+
+export const MOBILE_AUTH_RETURN_MODE =
+  process.env.EXPO_PUBLIC_MOBILE_AUTH_RETURN_MODE === 'direct' ? 'direct' : 'code';
+
+export const DEFAULT_DELEGATION_TTL_NS = BigInt(30 * 60) * BigInt(1_000_000_000);
