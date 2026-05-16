@@ -342,6 +342,22 @@ The receive field is the default ICRC-1 account owner principal for the logged-i
 
 The Cloudflare URL used during local testing is only a temporary HTTPS tunnel to the local `/mobile-auth` server. Use a stable production domain or frontend canister origin before relying on balances or receive principals long term, because Internet Identity principals are origin scoped.
 
+## Device Login
+
+After a successful Internet Identity login, the app registers a separate local
+device identity with the `mobile_auth` canister and stores that device private
+key in SecureStore. On the next launch, the app can call `device_login` directly
+and show the Internet Identity owner principal without opening `id.ai` again.
+
+When biometrics are enrolled, the device key is stored with SecureStore
+`requireAuthentication`. Some Android devices reject that mode when no
+biometrics are enrolled, even if the phone has a lock screen. In that case this
+prototype falls back to a separate SecureStore compatibility slot and shows a
+message in the UI. Production wallets should prefer biometric protection or add
+an explicit app PIN/password encryption layer before treating this as a spending
+identity. The current device login can authenticate to your own canister, but
+real ICP Ledger transfers still require the Internet Identity delegation.
+
 ## Flow Summary
 
 1. React Native creates `Ed25519KeyIdentity.generate()`.

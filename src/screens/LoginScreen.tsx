@@ -262,9 +262,14 @@ export function LoginScreen() {
 
     try {
       const device = await enableDeviceLogin(nextSession, 'This phone');
+      const meta = await hasStoredDeviceLogin();
       setDeviceLogin(device);
       setDeviceLoginAvailable(true);
-      setDeviceStatus('Device login enabled for this phone.');
+      setDeviceStatus(
+        meta?.protection === 'secure-store'
+          ? 'Device login enabled for this phone. Add biometrics for stronger local key protection.'
+          : 'Device login enabled for this phone.'
+      );
     } catch (reason) {
       setDeviceStatus(
         `Device login setup failed: ${reason instanceof Error ? reason.message : String(reason)}`

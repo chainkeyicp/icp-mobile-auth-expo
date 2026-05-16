@@ -242,6 +242,7 @@ function returnToApp(callback: URL): void {
     if (continueButton) {
       continueButton.textContent = 'Open app';
       continueButton.hidden = false;
+      continueButton.disabled = false;
       continueButton.onclick = openApp;
     }
   }, 900);
